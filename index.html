@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BSM Stats (Batting & Pitching)</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f9f9f9;
+      color: #222;
+      padding: 20px;
+    }
+    h2 {
+      color: #002d72;
+      margin-bottom: 10px;
+    }
+
+    /* ✅ 상단 바 스타일 수정 */
+    .top-bar {
+      display: flex;
+      align-items: center;     /* 세로 가운데 정렬 */
+      gap: 20px;               /* 항목 간격 균일하게 */
+      flex-wrap: wrap;         /* 화면 좁을 때 줄바꿈 허용 */
+      margin-bottom: 15px;
+    }
+
+    /* ✅ label도 flex로 정렬 */
+    .top-bar label {
+      display: flex;
+      align-items: center;
+      gap: 6px;                /* "Dataset:" 과 select 사이 간격 */
+      font-weight: 500;
+    }
+
+    /* ✅ select 일관된 크기와 정렬 */
+    select {
+      padding: 6px 10px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+      min-width: 120px;        /* select 너비 통일 */
+      height: 32px;            /* 높이 일정하게 */
+    }
+
+    /* 테이블 스타일 그대로 유지 */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.1);
+    }
+    th, td {
+      padding: 8px 10px;
+      text-align: center;
+      border-bottom: 1px solid #ddd;
+    }
+    thead {
+      background: #002d72;
+      color: white;
+      cursor: pointer;
+    }
+    th.sortable:hover {
+      background: #0041b3;
+    }
+    tr:hover {
+      background: #f2f6ff;
+    }
+  </style>
+</head>
+
+<body>
+  <h2>BSM Player Statistics</h2>
+
+  <div class="top-bar">
+    <label>
+      Dataset:
+      <select id="datasetSelect">
+        <option value="batting">Batting</option>
+        <option value="pitching">Pitching</option>
+      </select>
+    </label>
+
+    <label>
+      League:
+      <select id="leagueFilter"><option value="all">All</option></select>
+    </label>
+
+    <label>
+      Season:
+      <select id="yearFilter"><option value="all">All</option></select>
+    </label>
+  </div>
+
+  <div id="table-root">Loading...</div>
+
+  <script type="module">
+    import { renderApp } from './js/shared.js';
+    renderApp('batting');
+    document.getElementById('datasetSelect').addEventListener('change', e => renderApp(e.target.value));
+  </script>
+</body>
+</html>
