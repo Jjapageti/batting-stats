@@ -1,4 +1,3 @@
-// js/shared.js
 const MODULES = {
   batting: () => import('./batting.js'),
   pitching: () => import('./pitching.js')
@@ -6,13 +5,14 @@ const MODULES = {
 
 const cache = { batting: null, pitching: null };
 
-// 최근 렌더 상태(필터만 다시 그릴 때 사용)
+// 최근 렌더 상태
 let lastRows = [];
 let lastColumns = [];
 let lastSortKeys = {};
 let lastDatasetKey = "";
+let currentSort = { col: null, asc: true };
 
-// 공용: 프록시(fetch) (allorigins → 실패 시 corsproxy)
+// 프록시 fetch (allorigins → 실패 시 corsproxy)
 async function fetchViaProxy(apiUrl) {
   try {
     const u1 = "https://api.allorigins.win/raw?url=" + encodeURIComponent(apiUrl);
@@ -32,88 +32,115 @@ export async function renderApp(datasetKey) {
 
   const mod = await MODULES[datasetKey]();
   const { endpoint, columns, mapRow, sortKeys, fetchData } = mod.config;
-
   const root = document.getElementById('table-root');
   root.innerHTML = "Loading...";
 
   try {
-    // 데이터 캐싱
     if (!cache[datasetKey]) {
       const json = typeof fetchData === 'function'
-        ? await fetchData.call(mod.config) // this.endpoint 보존
+        ? await fetchData.call(mod.config)
         : await fetchViaProxy(endpoint);
-
       cache[datasetKey] = (json.data ?? []).map(mapRow);
     }
 
-    // 최근 상태 저장
     lastRows = cache[datasetKey];
     lastColumns = columns;
     lastSortKeys = sortKeys || {};
 
-    // 필터 UI(옵션) 구성 + 현재 선택값 보존
     buildFilters(lastRows);
 
-    // 현재 필터값으로 렌더
     const filtered = applyFilters(lastRows);
-    renderTable(filtered, lastColumns, lastSortKeys);
+    const finallySorted = applyCurrentSort(filtered, lastSortKeys);
+    renderTable(finallySorted, lastColumns, lastSortKeys);
   } catch (err) {
-    console.error("❌ Data load error:", err);
-    root.innerHTML = `<p>❌ Failed to load data.</p>`;
+    console.error(" Data load error:", err);
+    root.innerHTML = `<p> Failed to load data.</p>`;
   }
 }
 
-// 필터 옵션 구성(이전 선택값 보존)
 function buildFilters(rows) {
   const leagueSel = document.getElementById('leagueFilter');
   const yearSel = document.getElementById('yearFilter');
+  const nameInput = document.getElementById('nameSearch');
 
   const prevLeague = leagueSel?.value || 'all';
   const prevYear = yearSel?.value || 'all';
+  const prevName = nameInput?.value || '';
 
-  const leagues = [...new Set(rows.map(r => r.Acronym))].filter(Boolean).sort();
+  const leagues = [...new Set(rows.map(r => r.Acronym))].filter(Boolean).sort((a,b)=>a.localeCompare(b));
   const years = [...new Set(rows.map(r => r.Season))].filter(v => v !== "-").sort((a,b)=>b-a);
 
-  leagueSel.innerHTML =
-    '<option value="all">All</option>' +
-    leagues.map(l=>`<option value="${l}">${l}</option>`).join('');
+  leagueSel.innerHTML = '<option value="all">All</option>' + leagues.map(l=>`<option>${l}</option>`).join('');
+  yearSel.innerHTML = '<option value="all">All</option>' + years.map(y=>`<option>${y}</option>`).join('');
 
-  yearSel.innerHTML =
-    '<option value="all">All</option>' +
-    years.map(y=>`<option value="${y}">${y}</option>`).join('');
+  leagueSel.value = prevLeague;
+  yearSel.value = prevYear;
+  nameInput.value = prevName;
 
-  // 이전 선택 복원(옵션에 있을 때만)
-  if ([...leagueSel.options].some(o=>o.value===prevLeague)) leagueSel.value = prevLeague;
-  if ([...yearSel.options].some(o=>o.value===prevYear)) yearSel.value = prevYear;
-
-  // ▷ 필터 변경 시 "전체 리렌더 X" —> 캐시 기반으로 테이블만 갱신
-  leagueSel.onchange = () => {
+  const rerender = () => {
     const filtered = applyFilters(lastRows);
-    renderTable(filtered, lastColumns, lastSortKeys);
+    const finallySorted = applyCurrentSort(filtered, lastSortKeys);
+    renderTable(finallySorted, lastColumns, lastSortKeys);
   };
-  yearSel.onchange = () => {
-    const filtered = applyFilters(lastRows);
-    renderTable(filtered, lastColumns, lastSortKeys);
+
+  leagueSel.onchange = rerender;
+  yearSel.onchange = rerender;
+
+  // 이름 검색: 엔터 눌렀을 때만 적용
+  nameInput.onkeydown = (e) => {
+    if (e.key === 'Enter') {
+      rerender();
+    }
   };
 }
 
 function applyFilters(rows) {
   const league = document.getElementById('leagueFilter').value;
   const year = document.getElementById('yearFilter').value;
+  const search = document.getElementById('nameSearch')?.value?.toLowerCase() || "";
 
-  return rows.filter(r =>
-    (league === "all" || r.Acronym === league) &&
-    (year === "all" || String(r.Season) === String(year))
-  );
+  return rows.filter(r => {
+    const matchLeague = (league === "all" || r.Acronym === league);
+    const matchYear = (year === "all" || String(r.Season) === String(year));
+    const matchName = !search || r.Name?.toLowerCase().includes(search);
+    return matchLeague && matchYear && matchName;
+  });
+}
+
+function applyCurrentSort(rows, sortKeys = {}) {
+  if (!currentSort.col) return rows;
+  const { col, asc } = currentSort;
+  const keyFn = sortKeys[col];
+
+  const clone = rows.slice();
+  clone.sort((a, b) => {
+    let A = a[col];
+    let B = b[col];
+    if (typeof keyFn === 'function') {
+      A = keyFn(A); B = keyFn(B);
+      if (!Number.isNaN(A) && !Number.isNaN(B)) return asc ? A - B : B - A;
+    } else {
+      const nA = parseFloat(A), nB = parseFloat(B);
+      if (!isNaN(nA) && !isNaN(nB)) return asc ? nA - nB : nB - nA;
+    }
+    return asc ? String(A).localeCompare(String(B)) : String(B).localeCompare(String(A));
+  });
+  return clone;
 }
 
 function renderTable(rows, columns, sortKeys = {}) {
   const root = document.getElementById('table-root');
   if (!rows.length) { root.innerHTML = "<p>No data found.</p>"; return; }
 
+  const headerHtml = columns.map(c => {
+    const cls = ["sortable"];
+    if (currentSort.col === c) cls.push(currentSort.asc ? "asc" : "desc");
+    return `<th class="${cls.join(' ')}" data-col="${c}">${c}</th>`;
+  }).join('');
+
   const html = `
     <table id="statsTable">
-      <thead><tr>${columns.map(c=>`<th class="sortable" data-col="${c}">${c}</th>`).join('')}</tr></thead>
+      <thead><tr>${headerHtml}</tr></thead>
       <tbody>${rows.map(r => `
         <tr>${columns.map(c=>`<td>${r[c] ?? ''}</td>`).join('')}</tr>`).join('')}
       </tbody>
@@ -127,28 +154,17 @@ function makeTableSortable(table, sortKeys = {}) {
   table.querySelectorAll("th").forEach((th,i) => {
     th.addEventListener("click", () => {
       const col = th.dataset.col;
-      const asc = th.classList.toggle("asc");
-      const rows = Array.from(table.tBodies[0].rows);
-      const keyFn = sortKeys[col];
+      if (currentSort.col === col) currentSort.asc = !currentSort.asc;
+      else { currentSort.col = col; currentSort.asc = true; }
 
-      rows.sort((a,b) => {
-        let A = a.cells[i].innerText.trim();
-        let B = b.cells[i].innerText.trim();
-
-        if (typeof keyFn === 'function') {
-          A = keyFn(A);
-          B = keyFn(B);
-          if (!Number.isNaN(A) && !Number.isNaN(B)) {
-            return asc ? A - B : B - A;
-          }
-        } else {
-          const nA = parseFloat(A), nB = parseFloat(B);
-          if (!isNaN(nA) && !isNaN(nB)) return asc ? nA - nB : nB - nA;
-        }
-        return asc ? A.localeCompare(B) : B.localeCompare(A);
+      const rows = Array.from(table.tBodies[0].rows).map(tr => {
+        const obj = {};
+        lastColumns.forEach((c, idx) => obj[c] = tr.cells[idx].innerText.trim());
+        return obj;
       });
 
-      rows.forEach(r => table.tBodies[0].appendChild(r));
+      const finallySorted = applyCurrentSort(rows, sortKeys);
+      renderTable(finallySorted, lastColumns, sortKeys);
     });
   });
 }

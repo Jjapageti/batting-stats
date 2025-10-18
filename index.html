@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>BSM Stats (Batting & Pitching)</title>
+  <title>Berlin Sluggers Stats (Batting & Pitching)</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -16,34 +16,40 @@
       margin-bottom: 10px;
     }
 
-    /* ✅ 상단 바 스타일 수정 */
+    /* 상단 바 스타일 */
     .top-bar {
       display: flex;
-      align-items: center;     /* 세로 가운데 정렬 */
-      gap: 20px;               /* 항목 간격 균일하게 */
-      flex-wrap: wrap;         /* 화면 좁을 때 줄바꿈 허용 */
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
       margin-bottom: 15px;
     }
 
-    /* ✅ label도 flex로 정렬 */
     .top-bar label {
       display: flex;
       align-items: center;
-      gap: 6px;                /* "Dataset:" 과 select 사이 간격 */
+      gap: 6px;
       font-weight: 500;
     }
 
-    /* ✅ select 일관된 크기와 정렬 */
-    select {
+    /* select / input 크기와 정렬 통일 */
+    select,
+    input[type="text"] {
       padding: 6px 10px;
       border-radius: 4px;
       border: 1px solid #ccc;
       font-size: 14px;
-      min-width: 120px;        /* select 너비 통일 */
-      height: 32px;            /* 높이 일정하게 */
+      width: 160px;       /* 폭 통일 */
+      height: 32px;       /* 높이 통일 */
+      box-sizing: border-box;
     }
 
-    /* 테이블 스타일 그대로 유지 */
+    /* placeholder 색상 */
+    input[type="text"]::placeholder {
+      color: #999;
+    }
+
+    /* 테이블 스타일 */
     table {
       width: 100%;
       border-collapse: collapse;
@@ -62,17 +68,13 @@
       color: white;
       cursor: pointer;
     }
-    th.sortable:hover {
-      background: #0041b3;
-    }
-    tr:hover {
-      background: #f2f6ff;
-    }
+    th.sortable:hover { background: #0041b3; }
+    tr:hover { background: #f2f6ff; }
   </style>
 </head>
 
 <body>
-  <h2>BSM Player Statistics</h2>
+  <h2>Berlin Sluggers Player Statistics</h2>
 
   <div class="top-bar">
     <label>
@@ -92,14 +94,49 @@
       Season:
       <select id="yearFilter"><option value="all">All</option></select>
     </label>
+
+    <!-- 이름 검색창 -->
+    <label>
+      Search:
+      <input type="text" id="nameSearch" placeholder="Type name & press Enter" />
+    </label>
   </div>
 
   <div id="table-root">Loading...</div>
 
   <script type="module">
     import { renderApp } from './js/shared.js';
+
+    // 초기 로드
     renderApp('batting');
+
+    // Dataset 변경 시
     document.getElementById('datasetSelect').addEventListener('change', e => renderApp(e.target.value));
+
+    // 이름 검색 (엔터 누를 때만 적용)
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        const search = document.getElementById('nameSearch').value.toLowerCase();
+        const league = document.getElementById('leagueFilter').value;
+        const year = document.getElementById('yearFilter').value;
+
+        // js/shared.js의 내부 상태 접근
+        import('./js/shared.js').then(mod => {
+          const allRows = mod.__getLastRows();
+          const columns = mod.__getLastColumns();
+          const sortKeys = mod.__getLastSortKeys();
+
+          const filtered = allRows.filter(r => {
+            const matchLeague = (league === "all" || r.Acronym === league);
+            const matchYear = (year === "all" || String(r.Season) === String(year));
+            const matchName = !search || r.Name?.toLowerCase().includes(search);
+            return matchLeague && matchYear && matchName;
+          });
+
+          mod.__renderFiltered(filtered, columns, sortKeys);
+        });
+      }
+    });
   </script>
 </body>
 </html>
